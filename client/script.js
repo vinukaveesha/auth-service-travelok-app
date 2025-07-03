@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function loadWalletConfig() {
     try {
       const response = await fetch(`${API_BASE}/api/wallet-config`);
+      console.log("Response ",response)
       const config = await response.json();
       renderWalletButtons(config.supportedWallets);
     } catch (error) {
@@ -29,13 +30,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Add this helper function
+function isWalletInstalled(walletKey) {
+  return window.cardano && window.cardano[walletKey];
+}
+
+// Add retry mechanism for wallet detection
+async function checkWalletInstallation(walletKey, retries = 5, delay = 300) {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (isWalletInstalled(walletKey)) {
+        resolve(true);
+      } else if (retries > 0) {
+        retries--;
+        setTimeout(check, delay);
+      } else {
+        resolve(false);
+      }
+    };
+    check();
+  });
+}
+
   // Render wallet buttons
-function renderWalletButtons(wallets) {
+async function renderWalletButtons(wallets) {
   walletButtons.innerHTML = '';
   
-  wallets.forEach(wallet => {
-    const walletName = wallet.name.toLowerCase();
-    const isInstalled = window.Cardano && window.Cardano[walletName];
+  for (const wallet of wallets) {
+    const walletKey = wallet.key.toLowerCase();
+    const isInstalled = await checkWalletInstallation(walletKey);
     
     const button = document.createElement('button');
     button.className = `btn wallet-btn ${isInstalled ? '' : 'disabled'}`;
@@ -45,7 +68,7 @@ function renderWalletButtons(wallets) {
     `;
     
     if (isInstalled) {
-      button.addEventListener('click', () => connectWallet(wallet.name));
+      button.addEventListener('click', () => connectWallet(wallet));
     } else {
       button.addEventListener('click', () => {
         window.open(wallet.installUrl, '_blank');
@@ -53,21 +76,21 @@ function renderWalletButtons(wallets) {
     }
     
     walletButtons.appendChild(button);
-  });
+  }
 }
 
 // Connect to wallet
-async function connectWallet(walletName) {
+async function connectWallet(wallet) {
   try {
-    const walletNameLower = walletName.toLowerCase();
+    const walletKey = wallet.key.toLowerCase();
     
     // Check if wallet exists
-    if (!window.Cardano || !window.Cardano[walletNameLower]) {
-      throw new Error(`${walletName} wallet not detected!`);
+    if (!isWalletInstalled(walletKey)) {
+      throw new Error(`${wallet.name} wallet not detected!`);
     }
 
     // Enable wallet
-    selectedWallet = await window.Cardano[walletNameLower].enable();
+    selectedWallet = await window.cardano[walletKey].enable();
     
     // Get user address
     const addresses = await selectedWallet.getUsedAddresses();
