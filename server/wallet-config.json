@@ -2,21 +2,24 @@
   "supportedWallets": [
     {
       "name": "Nami",
+      "key": "nami",
       "icon": "https://namiwallet.io/favicon.ico",
       "apiVersion": "1.0.0",
-      "installUrl": "https://namiwallet.io/"
+      "installUrl": "https://chrome.google.com/webstore/detail/nami/lpfcbjknijpeeillifnkikgncikgfhdo"
     },
     {
       "name": "Lace",
+      "key": "lace",
       "icon": "https://www.lace.io/favicon.ico",
       "apiVersion": "1.0.0",
-      "installUrl": "https://www.lace.io/"
+      "installUrl": "https://chrome.google.com/webstore/detail/lace/efbeoggdkoelcimjfhhdngfodklpihii"
     },
     {
       "name": "Eternal",
+      "key": "eternal",
       "icon": "https://eternalwallet.io/favicon.ico",
       "apiVersion": "1.0.0",
-      "installUrl": "https://eternalwallet.io/"
+      "installUrl": "https://chrome.google.com/webstore/detail/eternal-wallet/hifbcpcnagfaidmcddgokabdmfjiongh"
     }
   ]
 }
