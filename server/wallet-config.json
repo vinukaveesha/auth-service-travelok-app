@@ -3,17 +3,20 @@
     {
       "name": "Nami",
       "icon": "https://namiwallet.io/favicon.ico",
-      "apiVersion": "1.0.0"
+      "apiVersion": "1.0.0",
+      "installUrl": "https://namiwallet.io/"
     },
     {
       "name": "Lace",
       "icon": "https://www.lace.io/favicon.ico",
-      "apiVersion": "1.0.0"
+      "apiVersion": "1.0.0",
+      "installUrl": "https://www.lace.io/"
     },
     {
       "name": "Eternal",
       "icon": "https://eternalwallet.io/favicon.ico",
-      "apiVersion": "1.0.0"
+      "apiVersion": "1.0.0",
+      "installUrl": "https://eternalwallet.io/"
     }
   ]
 }
