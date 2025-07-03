@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let userAddress = null;
   let challengeData = null;
 
-  const API_BASE = 'http://localhost:5000';
+  const API_BASE = 'https://localhost:3000';
 
   // Fetch wallet configuration from server
   async function loadWalletConfig() {
@@ -65,7 +65,6 @@ async function renderWalletButtons(wallets) {
     const button = document.createElement('button');
     button.className = `btn wallet-btn ${isInstalled ? '' : 'disabled'}`;
     button.innerHTML = `
-      <img src="${wallet.icon}" alt="${wallet.name}" height="24">
       ${isInstalled ? `Connect with ${wallet.name}` : `Install ${wallet.name}`}
     `;
     
