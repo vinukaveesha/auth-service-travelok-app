@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travelok - Wallet Binding</title>
+  <script src="https://unpkg.com/@meshsdk/core@1.5.2/dist/mesh.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Travelok Wallet Binding</h1>
+    
+    <div class="card" id="wallet-section">
+      <h2>Step 1: Connect Wallet</h2>
+      <div id="wallet-buttons"></div>
+      <div id="wallet-info" class="hidden">
+        <p><strong>Connected Address:</strong> <span id="wallet-address"></span></p>
+        <button id="bind-wallet" class="btn">Bind Wallet</button>
+      </div>
+    </div>
+    
+    <div class="card hidden" id="sign-section">
+      <h2>Step 2: Sign Challenge</h2>
+      <p id="challenge-message"></p>
+      <button id="sign-button" class="btn">Sign Message</button>
+    </div>
+    
+    <div class="card hidden" id="result-section">
+      <h2>Binding Result</h2>
+      <div id="result-message"></div>
+    </div>
+  </div>
+  
+  <script src="script.js"></script>
+</body>
+</html>

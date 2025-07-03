@@ -1,0 +1,19 @@
+{
+  "supportedWallets": [
+    {
+      "name": "Nami",
+      "icon": "https://namiwallet.io/favicon.ico",
+      "apiVersion": "1.0.0"
+    },
+    {
+      "name": "Lace",
+      "icon": "https://www.lace.io/favicon.ico",
+      "apiVersion": "1.0.0"
+    },
+    {
+      "name": "Eternal",
+      "icon": "https://eternalwallet.io/favicon.ico",
+      "apiVersion": "1.0.0"
+    }
+  ]
+}
