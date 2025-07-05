@@ -94,87 +94,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     return window.cardano && window.cardano[walletKey];
   }
 
-  // Helper function to convert hex address to bech32
-  function hexToBech32Address(hexAddress) {
-    try {
-      console.log('Converting hex address:', hexAddress);
-      
-      // If it's already a bech32 address, return as is
-      if (hexAddress.startsWith('addr1') || hexAddress.startsWith('addr_test1')) {
-        return hexAddress;
-      }
-      
-      // Convert hex to bytes
-      const addressBytes = new Uint8Array(hexAddress.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-      
-      // Use Mesh SDK to convert to bech32 if available
-      if (window.MeshSDK && window.MeshSDK.resolveDataHash) {
-        return window.MeshSDK.resolveDataHash(addressBytes);
-      }
-      
-      // Try using the cardano object to get bech32 address
-      if (window.cardano && window.cardano.utils) {
-        return window.cardano.utils.bytesToBech32(addressBytes);
-      }
-      
-      // Fallback: return hex if conversion fails
-      console.warn('Could not convert hex to bech32, returning hex');
-      return hexAddress;
-    } catch (error) {
-      console.error('Address conversion error:', error);
-      return hexAddress;
-    }
-  }
-
   // Update connectWallet function
   async function connectWallet(wallet) {
-  try {
-    const walletKey = wallet.key.toLowerCase();
-    const walletAPI = window.cardano?.[walletKey];
-    
-    if (!walletAPI) {
-      throw new Error(`${wallet.name} wallet not detected!`);
-    }
+    try {
+      const walletKey = wallet.key.toLowerCase();
+      const walletAPI = window.cardano?.[walletKey];
+      
+      if (!walletAPI) {
+        throw new Error(`${wallet.name} wallet not detected!`);
+      }
 
-    selectedWallet = await walletAPI.enable();
-    
-    // Get user address - try used addresses first, then unused addresses
-    let addresses = await selectedWallet.getUsedAddresses();
-    console.log('Used addresses:', addresses);
-    
-    if (addresses.length === 0) {
-      // If no used addresses, get unused addresses
-      addresses = await selectedWallet.getUnusedAddresses();
-      console.log('Unused addresses:', addresses);
+      selectedWallet = await walletAPI.enable();
+      
+      // Get user address - try used addresses first, then unused addresses
+      let addresses = await selectedWallet.getUsedAddresses();
+      console.log('Used addresses:', addresses);
+      
+      if (addresses.length === 0) {
+        // If no used addresses, get unused addresses
+        addresses = await selectedWallet.getUnusedAddresses();
+        console.log('Unused addresses:', addresses);
+      }
+      
+      if (addresses.length === 0) {
+        throw new Error('No addresses available from wallet');
+      }
+      
+      // Get the first available address
+      const rawAddress = addresses[0];
+      console.log('Raw address from wallet:', rawAddress);
+      
+      userAddress = rawAddress;
+      
+      // Update UI
+      walletAddress.textContent = userAddress;
+      walletInfo.classList.remove('hidden');
+      
+      console.log('Successfully connected to wallet. Address:', userAddress);
+    } catch (error) {
+      console.error('Wallet connection failed:', error);
+      showError(`Wallet connection failed: ${error.message}`);
     }
-    
-    if (addresses.length === 0) {
-      throw new Error('No addresses available from wallet');
-    }
-    
-    // Get the first available address
-    const rawAddress = addresses[0];
-    console.log('Raw address from wallet:', rawAddress);
-    
-    // For now, use the raw hex address directly
-    // The server-side validation will need to be updated to handle hex addresses
-    // or you'll need to implement proper bech32 encoding
-    processedAddress = rawAddress;
-    
-    console.log('Processed address:', processedAddress);
-    
-    userAddress = processedAddress;
-    
-    // Update UI
-    walletAddress.textContent = userAddress;
-    walletInfo.classList.remove('hidden');
-    
-    console.log('Successfully connected to wallet. Address:', userAddress);
-  } catch (error) {
-    console.error('Wallet connection failed:', error);
-    showError(`Wallet connection failed: ${error.message}`);
   }
-}
 
   // Initiate wallet binding
   bindWalletBtn.addEventListener('click', async () => {
@@ -210,7 +171,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Sign challenge message
   // Helper function to convert string to hex
   function stringToHex(str) {
     return Array.from(str)
@@ -218,19 +178,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       .join('');
   }
 
-  // Helper function to convert hex to bytes (for verification)
-  function hexToBytes(hex) {
-    const bytes = [];
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes.push(parseInt(hex.substr(i, 2), 16));
-    }
-    return new Uint8Array(bytes);
-  }
-
   // Updated sign button event listener
   signButton.addEventListener('click', async () => {
     try {
-      // Convert message to hex properly
+      // Convert message to hex for signing (required by Cardano wallets)
       const messageHex = stringToHex(challengeData.message);
       console.log('Original message:', challengeData.message);
       console.log('Message as hex:', messageHex);
@@ -252,7 +203,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           address: userAddress, 
           signature,
           key,
-          message: challengeData.message // Send original message for server verification
+          message: challengeData.message, // Send original message
+          messageHex: messageHex // Also send hex version for server verification
         })
       });
       

@@ -45,13 +45,7 @@ export function validateAddress(address) {
 // Helper function to parse CBOR signature from Lace wallet
 function parseCBORSignature(signatureHex) {
   try {
-    // The signature from Lace is in CBOR format
-    // We need to extract the actual signature bytes
     const signatureBytes = Buffer.from(signatureHex, 'hex');
-    
-    // Parse the CBOR structure to extract the signature
-    // The signature is typically at the end of the CBOR structure
-    // Look for the last 64 bytes which should be the Ed25519 signature
     
     // For Lace wallet, the signature is usually the last 64 bytes
     const actualSignature = signatureBytes.slice(-64);
@@ -72,15 +66,9 @@ function parseCBORKey(keyHex) {
   try {
     const keyBytes = Buffer.from(keyHex, 'hex');
     
-    // For Lace wallet, extract the public key
-    // The public key is typically 32 bytes and can be found in the CBOR structure
-    // Look for a 32-byte sequence that represents the public key
-    
-    // Try to find the public key in the CBOR structure
-    // It's usually near the end, before the signature
+    // For Lace wallet, extract the public key (last 32 bytes)
     let publicKey;
     
-    // Method 1: Look for the last 32 bytes
     if (keyBytes.length >= 32) {
       publicKey = keyBytes.slice(-32);
     } else {
@@ -98,13 +86,21 @@ function parseCBORKey(keyHex) {
   }
 }
 
+// Helper function to convert string to hex
+function stringToHex(str) {
+  return Array.from(str)
+    .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+    .join('');
+}
+
 // Cardano signature verification with CBOR parsing
-export async function verifySignature(address, signature, key, message) {
+export async function verifySignature(address, signature, key, message, messageHex) {
   try {
     console.log('Verifying signature for address:', address);
     console.log('Raw signature:', signature);
     console.log('Raw key:', key);
     console.log('Message:', message);
+    console.log('Message hex:', messageHex);
     
     // Parse CBOR signature and key
     const actualSignature = parseCBORSignature(signature);
@@ -114,10 +110,12 @@ export async function verifySignature(address, signature, key, message) {
     const publicKey = csl.PublicKey.from_bytes(actualKey);
     const ed25519Signature = csl.Ed25519Signature.from_bytes(actualSignature);
     
-    // Convert message to bytes
-    const messageBytes = Buffer.from(message, 'utf8');
+    // The wallet signs the hex-encoded message, so we need to verify against that
+    const messageToVerify = messageHex || stringToHex(message);
+    const messageBytes = Buffer.from(messageToVerify, 'hex');
     
-    console.log('Message bytes:', messageBytes.toString('hex'));
+    console.log('Message to verify (hex):', messageToVerify);
+    console.log('Message bytes length:', messageBytes.length);
     
     // Verify the signature
     const isValid = publicKey.verify(messageBytes, ed25519Signature);
@@ -128,15 +126,21 @@ export async function verifySignature(address, signature, key, message) {
   } catch (error) {
     console.error('Signature verification error:', error);
     
-    // Fallback: try different parsing approaches
+    // Fallback: try different approaches
     try {
-      console.log('Trying alternative verification method...');
+      console.log('Trying alternative verification methods...');
       
-      // Alternative approach: try to use the signature as-is
       const signatureBytes = Buffer.from(signature, 'hex');
       const keyBytes = Buffer.from(key, 'hex');
       
-      // Try different offsets to find the actual signature and key
+      // Try different message formats
+      const messageFormats = [
+        messageHex || stringToHex(message), // Hex format
+        Buffer.from(message, 'utf8'), // UTF-8 bytes
+        message // Raw string
+      ];
+      
+      // Try different offsets for signature and key extraction
       for (let sigOffset = Math.max(0, signatureBytes.length - 64); sigOffset <= signatureBytes.length - 64; sigOffset++) {
         for (let keyOffset = Math.max(0, keyBytes.length - 32); keyOffset <= keyBytes.length - 32; keyOffset++) {
           try {
@@ -145,13 +149,26 @@ export async function verifySignature(address, signature, key, message) {
             
             const publicKey = csl.PublicKey.from_bytes(testKey);
             const ed25519Signature = csl.Ed25519Signature.from_bytes(testSig);
-            const messageBytes = Buffer.from(message, 'utf8');
             
-            const isValid = publicKey.verify(messageBytes, ed25519Signature);
-            
-            if (isValid) {
-              console.log('Found valid signature at offsets:', { sigOffset, keyOffset });
-              return true;
+            for (const msgFormat of messageFormats) {
+              try {
+                let msgBytes;
+                if (typeof msgFormat === 'string') {
+                  msgBytes = Buffer.from(msgFormat, 'hex');
+                } else {
+                  msgBytes = msgFormat;
+                }
+                
+                const isValid = publicKey.verify(msgBytes, ed25519Signature);
+                
+                if (isValid) {
+                  console.log('Found valid signature at offsets:', { sigOffset, keyOffset });
+                  console.log('Message format that worked:', msgFormat);
+                  return true;
+                }
+              } catch (e) {
+                // Continue trying
+              }
             }
           } catch (e) {
             // Continue trying different offsets

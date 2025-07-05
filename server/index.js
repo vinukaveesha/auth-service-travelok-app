@@ -91,7 +91,7 @@ app.post('/api/auth-challenge', (req, res) => {
 
 // 3. Verify signature and bind wallet
 app.post('/api/verify-wallet', async (req, res) => {
-  const { address, signature, key, message } = req.body;
+  const { address, signature, key, message, messageHex } = req.body;
   
   // Session validation
   if (!req.session.nonce || req.session.address !== address) {
@@ -116,7 +116,8 @@ app.post('/api/verify-wallet', async (req, res) => {
       address,
       signature,
       key,
-      message // Use the original message, not the nonce
+      message,
+      messageHex // Pass the hex version for verification
     );
 
     if (!isValid) {
