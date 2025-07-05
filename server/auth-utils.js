@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import cbor from 'cbor';
 import * as csl from '@emurgo/cardano-serialization-lib-nodejs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,45 +45,99 @@ export function validateAddress(address) {
 
 // Helper function to parse CBOR signature from Lace wallet
 function parseCBORSignature(signatureHex) {
+  const signatureBytes = Buffer.from(signatureHex, 'hex');
+  
   try {
-    const signatureBytes = Buffer.from(signatureHex, 'hex');
-    
-    // For Lace wallet, the signature is usually the last 64 bytes
-    const actualSignature = signatureBytes.slice(-64);
-    
-    console.log('Original signature length:', signatureBytes.length);
-    console.log('Extracted signature length:', actualSignature.length);
-    console.log('Extracted signature:', actualSignature.toString('hex'));
-    
-    return actualSignature;
+    const decoded = cbor.decodeFirstSync(signatureBytes);
+    console.dir(decoded, { depth: null });
+
+    // Check if decoded is a direct object with a 'signature' field
+    if (decoded && typeof decoded === 'object' && !Buffer.isBuffer(decoded)) {
+      if ('signature' in decoded) {
+        console.log('Found signature in "signature" field');
+        return Buffer.from(decoded.signature);
+      }
+
+      if ('value' in decoded && decoded.value?.signature) {
+        console.log('Found signature in COSE_Sign1 structure');
+        return Buffer.from(decoded.value.signature);
+      }
+
+      // Check map style
+      if (decoded.get) {
+        if (decoded.has('signature')) {
+          const sig = decoded.get('signature');
+          console.log('Found signature in map with key "signature"');
+          return sig;
+        }
+
+        if (decoded.has(5)) {
+          const sig = decoded.get(5);
+          console.log('Found signature in map with key 5');
+          return sig;
+        }
+      }
+    }
+
+    // If COSE_Sign1 format: [protected, unprotected, payload, signature]
+    if (Array.isArray(decoded) && decoded.length === 4) {
+      console.log('Found signature in COSE_Sign1 array structure');
+      return decoded[3];
+    }
+
+    throw new Error('Signature not found in CBOR structure');
   } catch (error) {
-    console.error('CBOR parsing error:', error);
-    throw new Error('Failed to parse CBOR signature');
+    console.error('CBOR signature decoding error:', error);
   }
+
+  // Fallback: Use last 64 bytes
+  if (signatureBytes.length >= 64) {
+    console.log('Using last 64 bytes of signature as fallback');
+    return signatureBytes.slice(-64);
+  }
+
+  throw new Error('Signature too short');
 }
+
 
 // Helper function to parse CBOR key from Lace wallet
 function parseCBORKey(keyHex) {
+  const keyBytes = Buffer.from(keyHex, 'hex');
+  
   try {
-    const keyBytes = Buffer.from(keyHex, 'hex');
+    // Decode the CBOR structure
+    const decoded = cbor.decodeFirstSync(keyBytes);
     
-    // For Lace wallet, extract the public key (last 32 bytes)
-    let publicKey;
+    console.log('Decoded CBOR key structure:', decoded);
     
-    if (keyBytes.length >= 32) {
-      publicKey = keyBytes.slice(-32);
-    } else {
-      throw new Error('Key too short');
+    // The public key is in the -2 field (COSE key format)
+    if (decoded && decoded.get) {
+      const publicKey = decoded.get(-2);
+      if (publicKey) {
+        console.log('Extracted public key from CBOR structure');
+        console.log('Extracted key length:', publicKey.length);
+        console.log('Extracted key:', Buffer.from(publicKey).toString('hex'));
+        return publicKey;
+      }
     }
     
-    console.log('Original key length:', keyBytes.length);
-    console.log('Extracted key length:', publicKey.length);
-    console.log('Extracted key:', publicKey.toString('hex'));
-    
-    return publicKey;
+    throw new Error('Public key not found in CBOR structure');
   } catch (error) {
     console.error('CBOR key parsing error:', error);
-    throw new Error('Failed to parse CBOR key');
+    
+    // Fallback 1: Try to extract the public key from known fields
+    try {
+      // Lace wallet public key might be in the last 32 bytes
+      if (keyBytes.length >= 32) {
+        const fallbackKey = keyBytes.slice(-32);
+        console.log('Using fallback key extraction (last 32 bytes)');
+        return fallbackKey;
+      }
+      throw new Error('Key too short for fallback');
+    } catch (fallbackError) {
+      console.error('Fallback key extraction failed:', fallbackError);
+      throw new Error('Failed to parse CBOR key');
+    }
   }
 }
 
