@@ -115,9 +115,10 @@ async function connectWallet(wallet) {
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Challenge request failed');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Challenge request failed');
       }
+      challengeData = await response.json();
       
       challengeData = await response.json();
       

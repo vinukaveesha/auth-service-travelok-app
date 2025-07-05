@@ -28,12 +28,17 @@ app.use(cors({
   methods: ['GET', 'POST']
 }));
 app.use(express.json());
+
+// Add this after dotenv.config()
+const SESSION_SECRET = process.env.SESSION_SECRET || 'development-secret';
+
+// Update session middleware
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: false, // Keep false for HTTP
+    secure: false,
     maxAge: 300000
   }
 }));
