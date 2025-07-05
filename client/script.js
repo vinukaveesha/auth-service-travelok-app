@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function loadWalletConfig() {
     try {
       const response = await fetch(`${API_BASE}/api/wallet-config`);
-      console.log("Response ",response)
       const config = await response.json();
       renderWalletButtons(config.supportedWallets);
     } catch (error) {
@@ -29,11 +28,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       showError('Failed to load wallet configuration');
     }
   }
-
-  // Add this helper function
-function isWalletInstalled(walletKey) {
-  return window.Cardano && window.Cardano[walletKey];
-}
 
 // Add retry mechanism for wallet detection
 async function checkWalletInstallation(walletKey, retries = 10, delay = 300) {
@@ -80,18 +74,22 @@ async function renderWalletButtons(wallets) {
   }
 }
 
-// Connect to wallet
+// Correct wallet detection using window.cardano (not window.Cardano)
+function isWalletInstalled(walletKey) {
+  return window.cardano && window.cardano[walletKey];
+}
+
+// Update connectWallet function
 async function connectWallet(wallet) {
   try {
     const walletKey = wallet.key.toLowerCase();
+    const walletAPI = window.cardano?.[walletKey];
     
-    // Check if wallet exists
-    if (!isWalletInstalled(walletKey)) {
+    if (!walletAPI) {
       throw new Error(`${wallet.name} wallet not detected!`);
     }
 
-    // Enable wallet
-    selectedWallet = await window.Cardano[walletKey].enable();
+    selectedWallet = await walletAPI.enable();
     
     // Get user address
     const addresses = await selectedWallet.getUsedAddresses();

@@ -1,3 +1,5 @@
+import https from 'node:https';
+import fs from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -27,16 +29,27 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret',
+  secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false, maxAge: 300000 } // 5 minutes
+  saveUninitialized: false,
+  cookie: { 
+    secure: false, // Keep false for HTTP
+    maxAge: 300000
+  }
 }));
 
 app.use(express.static(join(__dirname, '../client')));
 
 // Wallet config cache
 let walletConfig;
+
+// Add before routes
+app.use((req, res, next) => {
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'self' https:;");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
 
 // 1. Get wallet configuration
 app.get('/api/wallet-config', async (req, res) => {
@@ -111,6 +124,11 @@ app.post('/api/verify-wallet', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Auth service running on http://localhost:${PORT}`);
+const server = https.createServer({
+  key: fs.readFileSync('./key.pem'),
+  cert: fs.readFileSync('./cert.pem')
+}, app);
+
+server.listen(PORT, () => {
+  console.log(`Auth service running on https://localhost:${PORT}`);
 });
