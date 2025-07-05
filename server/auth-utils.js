@@ -22,7 +22,7 @@ export function generateNonce() {
 }
 
 export function validateAddress(address) {
-  return /^addr[0-9a-z]{50,60}$/.test(address);
+  return /^addr(_test)?1[0-9a-z]+$/.test(address);
 }
 
 // Cardano signature verification

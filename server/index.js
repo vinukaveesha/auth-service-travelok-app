@@ -71,6 +71,8 @@ app.get('/api/wallet-config', async (req, res) => {
 // 2. Generate authentication challenge
 app.post('/api/auth-challenge', (req, res) => {
   const { address } = req.body;
+
+  console.log('Received address:', address); 
   
   if (!validateAddress(address)) {
     return res.status(400).json({ error: 'Invalid Cardano address' });

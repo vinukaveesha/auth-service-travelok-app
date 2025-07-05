@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
   // DOM Elements
+  await detectWallets();
   const walletSection = document.getElementById('wallet-section');
   const walletButtons = document.getElementById('wallet-buttons');
   const walletInfo = document.getElementById('wallet-info');
@@ -29,6 +30,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  async function detectWallets() {
+  return new Promise(resolve => {
+    const check = () => {
+      if (window.cardano) {
+        console.log('Wallets detected:', Object.keys(window.cardano));
+        resolve(true);
+      } else {
+        setTimeout(check, 3000);
+      }
+    };
+    check();
+  });
+}
+
 // Add retry mechanism for wallet detection
 async function checkWalletInstallation(walletKey, retries = 10, delay = 300) {
   return new Promise((resolve) => {
@@ -50,7 +65,7 @@ async function checkWalletInstallation(walletKey, retries = 10, delay = 300) {
 async function renderWalletButtons(wallets) {
   walletButtons.innerHTML = '';
 
-  console.log('Detected wallets:', window.Cardano ? Object.keys(window.Cardano) : 'No wallets detected');
+  console.log('Detected wallets:', window.cardano ? Object.keys(window.cardano) : 'No wallets detected');
   
   for (const wallet of wallets) {
     const walletKey = wallet.key.toLowerCase();
@@ -108,6 +123,7 @@ async function connectWallet(wallet) {
   bindWalletBtn.addEventListener('click', async () => {
     try {
       // Request challenge from server
+      
       const response = await fetch(`${API_BASE}/api/auth-challenge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,10 +151,11 @@ async function connectWallet(wallet) {
   // Sign challenge message
   signButton.addEventListener('click', async () => {
     try {
+      const hexMessage = Buffer.from(challengeData.message).toString('hex');
       // Sign message with wallet
       const { signature, key } = await selectedWallet.signData(
         userAddress, 
-        challengeData.message
+        hexMessage // Use hex-formatted message
       );
       
       // Verify signature with server
@@ -169,8 +186,8 @@ async function connectWallet(wallet) {
         throw new Error(result.error || 'Wallet binding failed');
       }
     } catch (error) {
-      console.error('Signature verification failed:', error);
-      showError(error.message);
+      console.error('Signature failed:', error);
+      showError(`Signing failed: ${error.message}`);
     }
   });
 
