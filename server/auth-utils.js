@@ -1,4 +1,4 @@
-// Updated auth-utils.js with proper CBOR signature parsing
+// Fixed auth-utils.js with proper CBOR signature parsing
 import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,101 +43,140 @@ export function validateAddress(address) {
   return isValid;
 }
 
-// Helper function to parse CBOR signature from Lace wallet
+// Fixed CBOR signature parsing for COSE_Sign1 format
 function parseCBORSignature(signatureHex) {
-  const signatureBytes = Buffer.from(signatureHex, 'hex');
-  
   try {
+    const signatureBytes = Buffer.from(signatureHex, 'hex');
+    console.log('Parsing CBOR signature, length:', signatureBytes.length);
+    
+    // Decode the CBOR structure
     const decoded = cbor.decodeFirstSync(signatureBytes);
-    console.dir(decoded, { depth: null });
-
-    // Check if decoded is a direct object with a 'signature' field
-    if (decoded && typeof decoded === 'object' && !Buffer.isBuffer(decoded)) {
-      if ('signature' in decoded) {
-        console.log('Found signature in "signature" field');
+    console.log('CBOR decoded structure type:', typeof decoded);
+    console.log('CBOR decoded is array:', Array.isArray(decoded));
+    
+    if (Array.isArray(decoded)) {
+      console.log('CBOR array length:', decoded.length);
+      
+      // COSE_Sign1 format: [protected, unprotected, payload, signature]
+      if (decoded.length >= 4) {
+        const signature = decoded[3];
+        console.log('Extracted signature from COSE_Sign1 array');
+        console.log('Signature type:', typeof signature);
+        console.log('Signature length:', signature?.length);
+        
+        if (Buffer.isBuffer(signature)) {
+          return signature;
+        } else if (signature instanceof Uint8Array) {
+          return Buffer.from(signature);
+        } else {
+          throw new Error('Signature is not a buffer or Uint8Array');
+        }
+      }
+    }
+    
+    // If it's a map/object, try to extract signature
+    if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+      if (decoded.signature) {
+        console.log('Found signature in object.signature');
         return Buffer.from(decoded.signature);
       }
-
-      if ('value' in decoded && decoded.value?.signature) {
-        console.log('Found signature in COSE_Sign1 structure');
-        return Buffer.from(decoded.value.signature);
-      }
-
-      // Check map style
-      if (decoded.get) {
-        if (decoded.has('signature')) {
-          const sig = decoded.get('signature');
-          console.log('Found signature in map with key "signature"');
-          return sig;
-        }
-
-        if (decoded.has(5)) {
-          const sig = decoded.get(5);
-          console.log('Found signature in map with key 5');
-          return sig;
+      
+      // Try Map interface
+      if (decoded.get && typeof decoded.get === 'function') {
+        const sig = decoded.get(3) || decoded.get('signature');
+        if (sig) {
+          console.log('Found signature in Map');
+          return Buffer.from(sig);
         }
       }
     }
-
-    // If COSE_Sign1 format: [protected, unprotected, payload, signature]
-    if (Array.isArray(decoded) && decoded.length === 4) {
-      console.log('Found signature in COSE_Sign1 array structure');
-      return decoded[3];
-    }
-
-    throw new Error('Signature not found in CBOR structure');
+    
+    throw new Error('Unable to extract signature from CBOR structure');
+    
   } catch (error) {
-    console.error('CBOR signature decoding error:', error);
+    console.error('CBOR signature parsing error:', error);
+    
+    // Fallback: try to extract last 64 bytes as Ed25519 signature
+    const signatureBytes = Buffer.from(signatureHex, 'hex');
+    if (signatureBytes.length >= 64) {
+      console.log('Using fallback: last 64 bytes as signature');
+      return signatureBytes.slice(-64);
+    }
+    
+    throw new Error('Failed to parse signature and fallback failed');
   }
-
-  // Fallback: Use last 64 bytes
-  if (signatureBytes.length >= 64) {
-    console.log('Using last 64 bytes of signature as fallback');
-    return signatureBytes.slice(-64);
-  }
-
-  throw new Error('Signature too short');
 }
 
-
-// Helper function to parse CBOR key from Lace wallet
+// Fixed CBOR key parsing for COSE_Key format
 function parseCBORKey(keyHex) {
-  const keyBytes = Buffer.from(keyHex, 'hex');
-  
   try {
+    const keyBytes = Buffer.from(keyHex, 'hex');
+    console.log('Parsing CBOR key, length:', keyBytes.length);
+    
     // Decode the CBOR structure
     const decoded = cbor.decodeFirstSync(keyBytes);
+    console.log('CBOR key decoded structure:', typeof decoded);
     
-    console.log('Decoded CBOR key structure:', decoded);
-    
-    // The public key is in the -2 field (COSE key format)
-    if (decoded && decoded.get) {
-      const publicKey = decoded.get(-2);
-      if (publicKey) {
-        console.log('Extracted public key from CBOR structure');
-        console.log('Extracted key length:', publicKey.length);
-        console.log('Extracted key:', Buffer.from(publicKey).toString('hex'));
-        return publicKey;
+    // COSE_Key format uses integer keys
+    if (decoded && typeof decoded === 'object') {
+      // Try Map interface first
+      if (decoded.get && typeof decoded.get === 'function') {
+        // Key type -2 is the x coordinate for Ed25519
+        const publicKey = decoded.get(-2);
+        if (publicKey) {
+          console.log('Extracted public key from COSE_Key map (-2)');
+          console.log('Public key length:', publicKey.length);
+          return Buffer.from(publicKey);
+        }
+        
+        // Also try key type 1 (kty) and -1 (crv) combinations
+        const kty = decoded.get(1);
+        const crv = decoded.get(-1);
+        console.log('Key type (kty):', kty, 'Curve (crv):', crv);
+        
+        // Try different key identifiers
+        for (const keyId of [-2, -3, 1, 2]) {
+          const key = decoded.get(keyId);
+          if (key && (Buffer.isBuffer(key) || key instanceof Uint8Array) && key.length === 32) {
+            console.log(`Found 32-byte key at position ${keyId}`);
+            return Buffer.from(key);
+          }
+        }
+      }
+      
+      // Try direct property access
+      if (decoded.publicKey) {
+        console.log('Found key in publicKey property');
+        return Buffer.from(decoded.publicKey);
       }
     }
     
-    throw new Error('Public key not found in CBOR structure');
+    throw new Error('Unable to extract public key from CBOR structure');
+    
   } catch (error) {
     console.error('CBOR key parsing error:', error);
     
-    // Fallback 1: Try to extract the public key from known fields
-    try {
-      // Lace wallet public key might be in the last 32 bytes
-      if (keyBytes.length >= 32) {
-        const fallbackKey = keyBytes.slice(-32);
-        console.log('Using fallback key extraction (last 32 bytes)');
-        return fallbackKey;
+    // Fallback: try to extract 32 bytes for Ed25519 public key
+    const keyBytes = Buffer.from(keyHex, 'hex');
+    
+    // Try different positions for 32-byte key
+    for (let i = 0; i <= keyBytes.length - 32; i++) {
+      const candidateKey = keyBytes.slice(i, i + 32);
+      
+      // Simple heuristic: Ed25519 public keys often don't start with 0x00
+      if (candidateKey[0] !== 0x00) {
+        console.log(`Using fallback key at position ${i}`);
+        return candidateKey;
       }
-      throw new Error('Key too short for fallback');
-    } catch (fallbackError) {
-      console.error('Fallback key extraction failed:', fallbackError);
-      throw new Error('Failed to parse CBOR key');
     }
+    
+    // Last resort: use last 32 bytes
+    if (keyBytes.length >= 32) {
+      console.log('Using last 32 bytes as fallback key');
+      return keyBytes.slice(-32);
+    }
+    
+    throw new Error('Failed to parse public key and fallback failed');
   }
 }
 
@@ -148,93 +187,70 @@ function stringToHex(str) {
     .join('');
 }
 
-// Cardano signature verification with CBOR parsing
+// Enhanced Cardano signature verification
 export async function verifySignature(address, signature, key, message, messageHex) {
   try {
-    console.log('Verifying signature for address:', address);
-    console.log('Raw signature:', signature);
-    console.log('Raw key:', key);
+    console.log('=== SIGNATURE VERIFICATION START ===');
+    console.log('Address:', address);
     console.log('Message:', message);
     console.log('Message hex:', messageHex);
+    console.log('Raw signature length:', signature.length);
+    console.log('Raw key length:', key.length);
     
     // Parse CBOR signature and key
     const actualSignature = parseCBORSignature(signature);
     const actualKey = parseCBORKey(key);
     
+    console.log('Parsed signature length:', actualSignature.length);
+    console.log('Parsed key length:', actualKey.length);
+    console.log('Parsed signature hex:', actualSignature.toString('hex'));
+    console.log('Parsed key hex:', actualKey.toString('hex'));
+    
+    // Verify key and signature lengths
+    if (actualKey.length !== 32) {
+      throw new Error(`Invalid public key length: ${actualKey.length} (expected 32)`);
+    }
+    
+    if (actualSignature.length !== 64) {
+      throw new Error(`Invalid signature length: ${actualSignature.length} (expected 64)`);
+    }
+    
     // Create CSL objects
     const publicKey = csl.PublicKey.from_bytes(actualKey);
     const ed25519Signature = csl.Ed25519Signature.from_bytes(actualSignature);
     
-    // The wallet signs the hex-encoded message, so we need to verify against that
-    const messageToVerify = messageHex || stringToHex(message);
-    const messageBytes = Buffer.from(messageToVerify, 'hex');
+    // Try different message formats
+    const messageFormats = [
+      { name: 'hex', data: Buffer.from(messageHex || stringToHex(message), 'hex') },
+      { name: 'utf8', data: Buffer.from(message, 'utf8') },
+      { name: 'ascii', data: Buffer.from(message, 'ascii') }
+    ];
     
-    console.log('Message to verify (hex):', messageToVerify);
-    console.log('Message bytes length:', messageBytes.length);
+    for (const format of messageFormats) {
+      try {
+        console.log(`Trying verification with ${format.name} format:`, format.data.toString('hex'));
+        
+        const isValid = publicKey.verify(format.data, ed25519Signature);
+        
+        if (isValid) {
+          console.log(`✓ Signature verified successfully with ${format.name} format!`);
+          return true;
+        } else {
+          console.log(`✗ Signature verification failed with ${format.name} format`);
+        }
+      } catch (verifyError) {
+        console.log(`Error verifying with ${format.name} format:`, verifyError.message);
+      }
+    }
     
-    // Verify the signature
-    const isValid = publicKey.verify(messageBytes, ed25519Signature);
+    console.log('All verification attempts failed');
+    return false;
     
-    console.log('Signature verification result:', isValid);
-    
-    return isValid;
   } catch (error) {
     console.error('Signature verification error:', error);
-    
-    // Fallback: try different approaches
-    try {
-      console.log('Trying alternative verification methods...');
-      
-      const signatureBytes = Buffer.from(signature, 'hex');
-      const keyBytes = Buffer.from(key, 'hex');
-      
-      // Try different message formats
-      const messageFormats = [
-        messageHex || stringToHex(message), // Hex format
-        Buffer.from(message, 'utf8'), // UTF-8 bytes
-        message // Raw string
-      ];
-      
-      // Try different offsets for signature and key extraction
-      for (let sigOffset = Math.max(0, signatureBytes.length - 64); sigOffset <= signatureBytes.length - 64; sigOffset++) {
-        for (let keyOffset = Math.max(0, keyBytes.length - 32); keyOffset <= keyBytes.length - 32; keyOffset++) {
-          try {
-            const testSig = signatureBytes.slice(sigOffset, sigOffset + 64);
-            const testKey = keyBytes.slice(keyOffset, keyOffset + 32);
-            
-            const publicKey = csl.PublicKey.from_bytes(testKey);
-            const ed25519Signature = csl.Ed25519Signature.from_bytes(testSig);
-            
-            for (const msgFormat of messageFormats) {
-              try {
-                let msgBytes;
-                if (typeof msgFormat === 'string') {
-                  msgBytes = Buffer.from(msgFormat, 'hex');
-                } else {
-                  msgBytes = msgFormat;
-                }
-                
-                const isValid = publicKey.verify(msgBytes, ed25519Signature);
-                
-                if (isValid) {
-                  console.log('Found valid signature at offsets:', { sigOffset, keyOffset });
-                  console.log('Message format that worked:', msgFormat);
-                  return true;
-                }
-              } catch (e) {
-                // Continue trying
-              }
-            }
-          } catch (e) {
-            // Continue trying different offsets
-          }
-        }
-      }
-      
-      return false;
-    } catch (fallbackError) {
-      console.error('Fallback verification also failed:', fallbackError);
-      return false;
-    }
+    console.error('Error stack:', error.stack);
+    return false;
+  } finally {
+    console.log('=== SIGNATURE VERIFICATION END ===');
   }
 }

@@ -178,24 +178,51 @@ document.addEventListener('DOMContentLoaded', async () => {
       .join('');
   }
 
-  // Updated sign button event listener
+  // Updated sign button event listener with better error handling
   signButton.addEventListener('click', async () => {
     try {
+      if (!selectedWallet) {
+        throw new Error('No wallet connected');
+      }
+
+      if (!challengeData) {
+        throw new Error('No challenge data available');
+      }
+
       // Convert message to hex for signing (required by Cardano wallets)
       const messageHex = stringToHex(challengeData.message);
       console.log('Original message:', challengeData.message);
       console.log('Message as hex:', messageHex);
       
       // Sign message with wallet
-      const { signature, key } = await selectedWallet.signData(
+      console.log('Attempting to sign message...');
+      
+      const signResult = await selectedWallet.signData(
         userAddress, 
         messageHex
       );
+      
+      console.log('Sign result:', signResult);
+      
+      // Handle different response formats
+      let signature, key;
+      
+      if (signResult.signature && signResult.key) {
+        signature = signResult.signature;
+        key = signResult.key;
+      } else if (signResult.sig && signResult.publicKey) {
+        signature = signResult.sig;
+        key = signResult.publicKey;
+      } else {
+        throw new Error('Invalid signature response format');
+      }
       
       console.log('Signature received:', signature);
       console.log('Key received:', key);
       
       // Verify signature with server
+      console.log('Sending verification request...');
+      
       const verifyResponse = await fetch(`${API_BASE}/api/verify-wallet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -203,12 +230,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           address: userAddress, 
           signature,
           key,
-          message: challengeData.message, // Send original message
-          messageHex: messageHex // Also send hex version for server verification
+          message: challengeData.message,
+          messageHex: messageHex
         })
       });
       
       const result = await verifyResponse.json();
+      console.log('Verification result:', result);
       
       // Show result
       signSection.classList.add('hidden');
@@ -226,7 +254,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (error) {
       console.error('Signature failed:', error);
-      showError(`Signing failed: ${error.message}`);
+      
+      // Show more specific error messages
+      let errorMessage = error.message;
+      
+      if (error.message.includes('DataSignError')) {
+        errorMessage = 'Failed to sign message. Please check your wallet and try again.';
+      } else if (error.message.includes('Invalid signature')) {
+        errorMessage = 'Signature verification failed. Please try signing again.';
+      }
+      
+      showError(`Signing failed: ${errorMessage}`);
     }
   });
 
