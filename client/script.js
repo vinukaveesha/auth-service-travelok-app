@@ -126,99 +126,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Updated connectWallet function with better address handling
+  // Update connectWallet function
   async function connectWallet(wallet) {
-    try {
-      const walletKey = wallet.key.toLowerCase();
-      const walletAPI = window.cardano?.[walletKey];
-      
-      if (!walletAPI) {
-        throw new Error(`${wallet.name} wallet not detected!`);
-      }
-
-      selectedWallet = await walletAPI.enable();
-      
-      // Get user address - try multiple methods
-      let addresses;
-      
-      try {
-        // Method 1: Try getUsedAddresses first
-        addresses = await selectedWallet.getUsedAddresses();
-        console.log('Used addresses:', addresses);
-        
-        if (!addresses || addresses.length === 0) {
-          // Method 2: Try getUnusedAddresses if no used addresses
-          addresses = await selectedWallet.getUnusedAddresses();
-          console.log('Unused addresses:', addresses);
-        }
-        
-        if (!addresses || addresses.length === 0) {
-          throw new Error('No addresses found in wallet');
-        }
-        
-        // Get the first address
-        let rawAddress = addresses[0];
-        console.log('Raw address from wallet:', rawAddress);
-        
-        // Handle different address formats
-        if (typeof rawAddress === 'string') {
-          // Check if it's already a proper bech32 address
-          if (rawAddress.startsWith('addr1') || rawAddress.startsWith('addr_test1')) {
-            userAddress = rawAddress;
-          } else if (rawAddress.length > 50) {
-            // This looks like a hex-encoded address, try to convert it
-            try {
-              // Try to decode as hex and convert to bech32
-              const bytes = new Uint8Array(rawAddress.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-              
-              // Use the CSL library to convert to bech32
-              if (window.csl) {
-                const addr = window.csl.Address.from_bytes(bytes);
-                userAddress = addr.to_bech32();
-              } else {
-                // Fallback: assume it's mainnet and create bech32 manually
-                userAddress = 'addr1' + rawAddress.substring(2);
-              }
-            } catch (conversionError) {
-              console.error('Failed to convert hex address:', conversionError);
-              userAddress = rawAddress; // Use as-is
-            }
-          } else {
-            userAddress = rawAddress;
-          }
-        } else {
-          // If it's not a string, try to convert it
-          console.log('Non-string address, type:', typeof rawAddress);
-          userAddress = String(rawAddress);
-        }
-        
-        console.log('Processed address:', userAddress);
-        
-      } catch (addressError) {
-        console.error('Address retrieval failed:', addressError);
-        throw new Error(`Failed to get wallet address: ${addressError.message}`);
-      }
-      
-      // More lenient validation - just check if it looks like an address
-      if (!userAddress || 
-          (!userAddress.startsWith('addr1') && 
-           !userAddress.startsWith('addr_test1') && 
-           userAddress.length < 50)) {
-        console.error('Invalid address format:', userAddress);
-        throw new Error(`Invalid address format received from wallet: ${userAddress}`);
-      }
-      
-      // Update UI
-      walletAddress.textContent = userAddress;
-      walletInfo.classList.remove('hidden');
-      
-      console.log('Successfully connected to wallet. Address:', userAddress);
-      
-    } catch (error) {
-      console.error('Wallet connection failed:', error);
-      showError(`Wallet connection failed: ${error.message}`);
+  try {
+    const walletKey = wallet.key.toLowerCase();
+    const walletAPI = window.cardano?.[walletKey];
+    
+    if (!walletAPI) {
+      throw new Error(`${wallet.name} wallet not detected!`);
     }
+
+    selectedWallet = await walletAPI.enable();
+    
+    // Get user address - try used addresses first, then unused addresses
+    let addresses = await selectedWallet.getUsedAddresses();
+    console.log('Used addresses:', addresses);
+    
+    if (addresses.length === 0) {
+      // If no used addresses, get unused addresses
+      addresses = await selectedWallet.getUnusedAddresses();
+      console.log('Unused addresses:', addresses);
+    }
+    
+    if (addresses.length === 0) {
+      throw new Error('No addresses available from wallet');
+    }
+    
+    // Get the first available address
+    const rawAddress = addresses[0];
+    console.log('Raw address from wallet:', rawAddress);
+    
+    // For now, use the raw hex address directly
+    // The server-side validation will need to be updated to handle hex addresses
+    // or you'll need to implement proper bech32 encoding
+    processedAddress = rawAddress;
+    
+    console.log('Processed address:', processedAddress);
+    
+    userAddress = processedAddress;
+    
+    // Update UI
+    walletAddress.textContent = userAddress;
+    walletInfo.classList.remove('hidden');
+    
+    console.log('Successfully connected to wallet. Address:', userAddress);
+  } catch (error) {
+    console.error('Wallet connection failed:', error);
+    showError(`Wallet connection failed: ${error.message}`);
   }
+}
 
   // Initiate wallet binding
   bindWalletBtn.addEventListener('click', async () => {
@@ -255,18 +211,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Sign challenge message
+  // Helper function to convert string to hex
+  function stringToHex(str) {
+    return Array.from(str)
+      .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  // Helper function to convert hex to bytes (for verification)
+  function hexToBytes(hex) {
+    const bytes = [];
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes.push(parseInt(hex.substr(i, 2), 16));
+    }
+    return new Uint8Array(bytes);
+  }
+
+  // Updated sign button event listener
   signButton.addEventListener('click', async () => {
     try {
-      if (!challengeData || !selectedWallet) {
-        throw new Error('No challenge data or wallet connection');
-      }
+      // Convert message to hex properly
+      const messageHex = stringToHex(challengeData.message);
+      console.log('Original message:', challengeData.message);
+      console.log('Message as hex:', messageHex);
       
-      console.log('Signing message:', challengeData.message);
+      // Sign message with wallet
+      const { signature, key } = await selectedWallet.signData(
+        userAddress, 
+        messageHex
+      );
       
-      // Sign message with wallet - use the original message, not hex
-      const signResult = await selectedWallet.signData(userAddress, challengeData.message);
-      
-      console.log('Sign result:', signResult);
+      console.log('Signature received:', signature);
+      console.log('Key received:', key);
       
       // Verify signature with server
       const verifyResponse = await fetch(`${API_BASE}/api/verify-wallet`, {
@@ -274,16 +250,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           address: userAddress, 
-          signature: signResult.signature,
-          key: signResult.key,
-          message: challengeData.message
+          signature,
+          key,
+          message: challengeData.message // Send original message for server verification
         })
       });
-      
-      if (!verifyResponse.ok) {
-        const errorData = await verifyResponse.json();
-        throw new Error(errorData.error || 'Signature verification failed');
-      }
       
       const result = await verifyResponse.json();
       

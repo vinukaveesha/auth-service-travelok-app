@@ -91,7 +91,7 @@ app.post('/api/auth-challenge', (req, res) => {
 
 // 3. Verify signature and bind wallet
 app.post('/api/verify-wallet', async (req, res) => {
-  const { address, signature, key } = req.body;
+  const { address, signature, key, message } = req.body;
   
   // Session validation
   if (!req.session.nonce || req.session.address !== address) {
@@ -105,12 +105,18 @@ app.post('/api/verify-wallet', async (req, res) => {
   }
 
   try {
+    // Verify the message matches what we sent
+    const expectedMessage = `Sign this message to authenticate: ${req.session.nonce}`;
+    if (message !== expectedMessage) {
+      return res.status(400).json({ error: 'Message mismatch' });
+    }
+
     // Verify cryptographic signature
     const isValid = await verifySignature(
       address,
       signature,
       key,
-      req.session.nonce
+      message // Use the original message, not the nonce
     );
 
     if (!isValid) {
@@ -127,6 +133,7 @@ app.post('/api/verify-wallet', async (req, res) => {
     });
     
   } catch (error) {
+    console.error('Verification error:', error);
     res.status(500).json({ error: 'Verification failed: ' + error.message });
   }
 });
