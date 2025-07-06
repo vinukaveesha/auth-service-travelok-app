@@ -24,15 +24,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Middleware
 app.use(cors({
-  origin: '*', // Allow all origins (for development only!)
+  origin: '*', // Allow all origins
   methods: ['GET', 'POST']
 }));
 app.use(express.json());
 
-// Add this after dotenv.config()
 const SESSION_SECRET = process.env.SESSION_SECRET || 'development-secret';
 
-// Update session middleware
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
@@ -48,7 +46,6 @@ app.use(express.static(join(__dirname, '../client')));
 // Wallet config cache
 let walletConfig;
 
-// Add before routes
 app.use((req, res, next) => {
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Content-Security-Policy', "default-src 'self'; connect-src 'self' https:;");

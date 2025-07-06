@@ -1,4 +1,3 @@
-// Fixed auth-utils.js with proper COSE_Sign1 verification for Lace wallet
 import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,50 +42,7 @@ export function validateAddress(address) {
   return isValid;
 }
 
-// Fixed CBOR signature parsing for Lace wallet's COSE_Sign1 format
-function parseCBORSignature(signatureHex) {
-  try {
-    const signatureBytes = Buffer.from(signatureHex, 'hex');
-    console.log('Parsing CBOR signature, length:', signatureBytes.length);
-    
-    // Decode the CBOR structure
-    const decoded = cbor.decodeFirstSync(signatureBytes);
-    console.log('CBOR decoded structure type:', typeof decoded);
-    console.log('CBOR decoded is array:', Array.isArray(decoded));
-    
-    if (Array.isArray(decoded)) {
-      console.log('CBOR array length:', decoded.length);
-      console.log('CBOR array structure:', decoded.map((item, i) => `[${i}]: ${typeof item} (${item?.constructor?.name || 'unknown'})`));
-      
-      // COSE_Sign1 format: [protected, unprotected, payload, signature]
-      if (decoded.length >= 4) {
-        const signature = decoded[3];
-        console.log('Signature at index 3:', signature);
-        console.log('Signature type:', typeof signature);
-        console.log('Signature length:', signature?.length);
-        
-        if (Buffer.isBuffer(signature)) {
-          console.log('Signature is Buffer, length:', signature.length);
-          return signature;
-        } else if (signature instanceof Uint8Array) {
-          console.log('Signature is Uint8Array, length:', signature.length);
-          return Buffer.from(signature);
-        } else {
-          console.log('Signature is not a buffer, converting...');
-          return Buffer.from(signature);
-        }
-      }
-    }
-    
-    throw new Error('Unable to extract signature from CBOR structure');
-    
-  } catch (error) {
-    console.error('CBOR signature parsing error:', error);
-    throw new Error('Failed to parse signature');
-  }
-}
-
-// Fixed CBOR key parsing for Lace wallet's COSE_Key format
+// CBOR key parsing for Lace wallet's COSE_Key format
 function parseCBORKey(keyHex) {
   try {
     const keyBytes = Buffer.from(keyHex, 'hex');
@@ -117,13 +73,6 @@ function parseCBORKey(keyHex) {
     console.error('CBOR key parsing error:', error);
     throw new Error('Failed to parse public key');
   }
-}
-
-// Helper function to convert string to hex
-function stringToHex(str) {
-  return Array.from(str)
-    .map(char => char.charCodeAt(0).toString(16).padStart(2, '0'))
-    .join('');
 }
 
 // Create the COSE_Sign1 Sig_structure for verification
